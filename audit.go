@@ -305,6 +305,51 @@ func createFilters(config *viper.Viper) []AuditFilter {
 	return filters
 }
 
+func createStatsdConfig(config *viper.Viper) (StatsdConfig, error) {
+	sc := StatsdConfig {
+                kind: config.GetString("statsd.type"),
+                ip: config.GetString("statsd.ip"),
+                port: config.GetString("statsd.port"),
+        }
+        sc.tokens = make(map[uint16]map[string]string)
+        if sc.kind == "statsd" || sc.kind == "dogstatsd" {
+                l.Println("config type: ", sc.kind)
+                t := config.Get("statsd.tokens")
+		tl, ok := t.([]interface{})
+		if !ok {
+			return sc, errors.New(fmt.Sprintf("statsd.tokens not parsable as a list, has type: %T", t))
+		}
+		for _, ti := range tl {
+			tm, ok := ti.(map[interface{}]interface{})
+			if !ok {
+				return sc, errors.New(fmt.Sprintf("statsd.tokens item not mapable: %s", ti))
+			} 
+       		        for k, v := range tm {
+				it, ok := k.(int)
+				if !ok {
+					return sc, errors.New(fmt.Sprintf("statsd.tokens item not an int: %s", k))
+				}
+				ts, ok := v.(string)
+				if !ok {
+					return sc, errors.New(fmt.Sprintf("statsd.tokens item value not a string: %s", v))
+				}
+                                sc.tokens[uint16(it)] = make(map[string]string)
+                                for _, j := range strings.Split(ts, ",") {
+                                        tok := strings.Split(j, "=")
+                                        if len(tok) > 1 {
+                                                l.Println("adding statsd config item:", uint16(it), "token:", tok[0], "aliased:", tok[1])
+                                                sc.tokens[uint16(it)][tok[0]] = tok[1]
+                                        } else {
+                                                l.Println("adding statsd config item:", uint16(it), "token:", tok[0])
+                                                sc.tokens[uint16(it)][tok[0]] = ""
+                                        }       
+                                }       
+                        }
+		}      
+        }
+	return sc, nil
+}
+
 func main() {
 	configFile := flag.String("config", "", "Config file location")
 
@@ -332,12 +377,19 @@ func main() {
 	}
 
 	nlClient := NewNetlinkClient(config.GetInt("socket_buffer.receive"))
+
+	sc, err := createStatsdConfig(config)
+	if err != nil {
+		el.Fatal(err)
+	}
+	
 	marshaller := NewAuditMarshaller(
 		writer,
 		config.GetBool("message_tracking.enabled"),
 		config.GetBool("message_tracking.log_out_of_order"),
 		config.GetInt("message_tracking.max_out_of_order"),
 		createFilters(config),
+		sc,
 	)
 
 	l.Println("Started processing events")
