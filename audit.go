@@ -38,6 +38,7 @@ func loadConfig(configFile string) (*viper.Viper, error) {
 	config.SetDefault("output.syslog.tag", "go-audit")
 	config.SetDefault("output.syslog.attempts", "3")
 	config.SetDefault("log.flags", 0)
+	config.SetDefault("statsd.type", "none")
 
 	if err := config.ReadInConfig(); err != nil {
 		return nil, err
@@ -307,14 +308,14 @@ func createFilters(config *viper.Viper) []AuditFilter {
 
 func createStatsdConfig(config *viper.Viper) (StatsdConfig, error) {
 	sc := StatsdConfig {
-                kind: config.GetString("statsd.type"),
-                ip: config.GetString("statsd.ip"),
-                port: config.GetString("statsd.port"),
-        }
-        sc.tokens = make(map[uint16]map[string]string)
-        if sc.kind == "statsd" || sc.kind == "dogstatsd" {
-                l.Println("config type: ", sc.kind)
-                t := config.Get("statsd.tokens")
+		kind: config.GetString("statsd.type"),
+		ip: config.GetString("statsd.ip"),
+		port: config.GetString("statsd.port"),
+	}
+	sc.tokens = make(map[uint16]map[string]string)
+    if sc.kind == "statsd" || sc.kind == "dogstatsd" {
+    	l.Println("config type: ", sc.kind)
+    	t := config.Get("statsd.tokens")
 		tl, ok := t.([]interface{})
 		if !ok {
 			return sc, errors.New(fmt.Sprintf("statsd.tokens not parsable as a list, has type: %T", t))
@@ -323,8 +324,8 @@ func createStatsdConfig(config *viper.Viper) (StatsdConfig, error) {
 			tm, ok := ti.(map[interface{}]interface{})
 			if !ok {
 				return sc, errors.New(fmt.Sprintf("statsd.tokens item not mapable: %s", ti))
-			} 
-       		        for k, v := range tm {
+			}
+			for k, v := range tm {
 				it, ok := k.(int)
 				if !ok {
 					return sc, errors.New(fmt.Sprintf("statsd.tokens item not an int: %s", k))
@@ -333,20 +334,20 @@ func createStatsdConfig(config *viper.Viper) (StatsdConfig, error) {
 				if !ok {
 					return sc, errors.New(fmt.Sprintf("statsd.tokens item value not a string: %s", v))
 				}
-                                sc.tokens[uint16(it)] = make(map[string]string)
-                                for _, j := range strings.Split(ts, ",") {
-                                        tok := strings.Split(j, "=")
-                                        if len(tok) > 1 {
-                                                l.Println("adding statsd config item:", uint16(it), "token:", tok[0], "aliased:", tok[1])
-                                                sc.tokens[uint16(it)][tok[0]] = tok[1]
-                                        } else {
-                                                l.Println("adding statsd config item:", uint16(it), "token:", tok[0])
-                                                sc.tokens[uint16(it)][tok[0]] = ""
-                                        }       
-                                }       
-                        }
-		}      
-        }
+				sc.tokens[uint16(it)] = make(map[string]string)
+				for _, j := range strings.Split(ts, ",") {
+					tok := strings.Split(j, "=")
+					if len(tok) > 1 {
+						l.Println("adding statsd config item:", uint16(it), "token:", tok[0], "aliased:", tok[1])
+						sc.tokens[uint16(it)][tok[0]] = tok[1]
+					} else {
+						l.Println("adding statsd config item:", uint16(it), "token:", tok[0])
+						sc.tokens[uint16(it)][tok[0]] = ""
+					}
+				}
+			}
+		}
+	}
 	return sc, nil
 }
 

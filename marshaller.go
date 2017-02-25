@@ -1,13 +1,14 @@
 package main
 
 import (
+	"net"     // added for statsd communication
 	"os"
 	"regexp"
+	"sort"    // added for statsd ordered tokens
+	"strconv" // added for statsd event submission
+	"strings" // added for statsd string formatting
 	"syscall"
 	"time"
-	"strings" // added for statsd string formatting
-	"net"     // added for statsd communication
-	"strconv" // added for statsd event submission
 )
 
 const (
@@ -92,7 +93,7 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 		etags: []string{},
 		uid_map: msg.UidMap,
 	}
-	rtags := map[string]string{"auid": "", "uid": "", "name": ""}
+	rtags := map[string]string{"auid": "", "uid": "", "name": "", "key": ""}
 	var dat_gram string
 	var arg_val string
 	tag_delim := ":"
@@ -158,11 +159,11 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 
 	// arg stuff
 	if df.arg_string != "" && df.comm != "" {
-		arg_val = cutout(df.arg_string, df.tokens["comm"] + " ")
-                arg_val = strings.TrimSpace(arg_val[strings.Index(arg_val, "=")+1:])
-                if arg_val != "" {
-                        df.tags = append(df.tags, "arg" + tag_delim + arg_val)
-                }
+		arg_val = cutout(df.arg_string, df.comm + " ")
+        arg_val = strings.TrimSpace(arg_val[strings.Index(arg_val, "=")+1:])
+        if arg_val != "" {
+        	df.tags = appendKeyTag(df.tags, confs.tokens[uint16(1309)]["args"], "arg", tag_delim + arg_val)
+        }
 	}
 	
 	// users
@@ -179,24 +180,27 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 			if df.event == false {
 				dat_gram = "goaudit.syscall." + df.syscall + ".count:1|c"
 				if len(df.tags) > 0 {
-                        	        dat_gram += string("|#" + strings.Join(df.tags, ","))
-                        	}
+					sort.Strings(df.tags)
+					dat_gram += string("|#" + strings.Join(df.tags, ","))
+				}
 			} else {
 				evnt_t := "Go-Audit Syscall " + df.syscall + " ocurred"
 				if _, ok := df.tokens["key"]; ok {
 					evnt_t += " and matched on Key Group " + strings.Replace(strings.Replace(df.tokens["key"], ",event", "", -1), "event,", "", -1)
-                        	}
+				}
 				dat_gram = "_e{" + strconv.Itoa(len(evnt_t)) + "," + strconv.Itoa(len(df.content)) + "}:" + evnt_t + "|" + df.content + "|s:goaudit"
 				df.tags = append(df.tags, df.etags...)  
 				if len(df.tags) > 0 {
+					sort.Strings(df.tags)
 					dat_gram += string("|#" + strings.Join(df.tags, ","))
 				}
 			}
 		} else if confs.kind == "statsd" {
 			dat_gram = "goaudit.syscall." + df.syscall + ".count"
 			df.tags = append(df.tags, df.etags...) 
-        	        if len(df.tags) > 0 { // TODO: does the order of tags matter? possibly. may be best to alphabatize this before joining
-        	                dat_gram += string("." + strings.Join(df.tags, ".")) // use tokens instead of tags
+        	        if len(df.tags) > 0 {
+        	        	sort.Strings(df.tags)
+        	        	dat_gram += string("." + strings.Join(df.tags, "."))
         	        }       
         	        dat_gram += ":1|c"
 		}
