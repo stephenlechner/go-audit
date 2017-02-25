@@ -260,5 +260,4 @@ func Test_formatDatagram(t *testing.T) {
 			)
 		} 
 	}
-	
 }

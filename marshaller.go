@@ -160,10 +160,10 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 	// arg stuff
 	if df.arg_string != "" && df.comm != "" {
 		arg_val = cutout(df.arg_string, df.comm + " ")
-        arg_val = strings.TrimSpace(arg_val[strings.Index(arg_val, "=")+1:])
-        if arg_val != "" {
-        	df.tags = appendKeyTag(df.tags, confs.tokens[uint16(1309)]["args"], "arg", tag_delim + arg_val)
-        }
+		arg_val = strings.TrimSpace(arg_val[strings.Index(arg_val, "=")+1:])
+		if arg_val != "" {
+			df.tags = appendKeyTag(df.tags, confs.tokens[uint16(1309)]["args"], "arg", tag_delim + arg_val)
+		}
 	}
 	
 	// users
