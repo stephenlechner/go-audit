@@ -1,7 +1,7 @@
 package main
 
 import (
-	"net"     // added for statsd communication
+	"net" // added for statsd communication
 	"os"
 	"regexp"
 	"sort"    // added for statsd ordered tokens
@@ -38,16 +38,16 @@ type AuditFilter struct {
 }
 
 type datagramFormatter struct {
-	mtagbls		map[string]string
-	tokens 		map[string]string
-	content		string
-	syscall		string
-	comm		string
-	event		bool
-	arg_string	string
-	tags		[]string
-	etags		[]string
-	uid_map		map[string]string
+	mtagbls    map[string]string
+	tokens     map[string]string
+	content    string
+	syscall    string
+	comm       string
+	event      bool
+	arg_string string
+	tags       []string
+	etags      []string
+	uid_map    map[string]string
 }
 
 type statsdClient struct {
@@ -55,43 +55,43 @@ type statsdClient struct {
 }
 
 type StatsdConfig struct {
-	kind    string
-	ip      string
-	port    string
-	tokens  map[uint16]map[string]string
+	kind   string
+	ip     string
+	port   string
+	tokens map[uint16]map[string]string
 }
 
-func appendKeyTag(l []string, k1, k2, v string) ([]string) {
+func appendKeyTag(l []string, k1, k2, v string) []string {
 	if len(k1) > 0 {
-		return append(l, k1 + v)
+		return append(l, k1+v)
 	}
-	return append(l, k2 + v)
+	return append(l, k2+v)
 }
 
 // get specific pieces of messages for metric name, tags
 // TODO: This can probly be better done
-func cutout(s1, s2 string) (string) {
-	split_s1 := strings.Split(" " + s1, s2)
+func cutout(s1, s2 string) string {
+	split_s1 := strings.Split(" "+s1, s2)
 	if len(split_s1) < 2 {
-		return "" 
+		return ""
 	}
 	sub_part := split_s1[1] + " "
 	return sub_part[:strings.Index(sub_part, " ")]
 }
 
 // format the data for statsd or dogstatsd protocol
-func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
-	df := datagramFormatter {
-		mtagbls: map[string]string{"comm": "", "success": "", "exit": "", "tty": "", "cwd": "",},
-		tokens: map[string]string{},
-		content: "",
-		syscall: "",
-		comm: "",
-		event: false,
+func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) string {
+	df := datagramFormatter{
+		mtagbls:    map[string]string{"comm": "", "success": "", "exit": "", "tty": "", "cwd": ""},
+		tokens:     map[string]string{},
+		content:    "",
+		syscall:    "",
+		comm:       "",
+		event:      false,
 		arg_string: "",
-		tags: []string{},
-		etags: []string{},
-		uid_map: msg.UidMap,
+		tags:       []string{},
+		etags:      []string{},
+		uid_map:    msg.UidMap,
 	}
 	rtags := map[string]string{"auid": "", "uid": "", "name": "", "key": ""}
 	var dat_gram string
@@ -100,7 +100,7 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 	if confs.kind == "statsd" {
 		tag_delim = "_"
 	}
-	
+
 	for _, mes := range msg.Msgs {
 		cont := string(" " + strings.Replace(mes.Data, "\"", "", -1) + " ")
 		df.content += cont
@@ -109,18 +109,18 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 			// el.Println("config token matched on item type: ", mes.Type)
 			for k, v := range confs.tokens[mes.Type] {
 				// el.Println("attempting cutout of token: ", k, v, ":", cutout(cont, " " + k + "="))
-				if val := cutout(cont, " " + k + "="); val != "" {
+				if val := cutout(cont, " "+k+"="); val != "" {
 					df.tokens[k] = val
 					if _, ok := df.mtagbls[k]; ok {
-						df.tags = appendKeyTag(df.tags, v, k, tag_delim + val)
+						df.tags = appendKeyTag(df.tags, v, k, tag_delim+val)
 					} else if _, ok := rtags[k]; !ok {
-						df.etags = appendKeyTag(df.etags, v, k, tag_delim + val)
+						df.etags = appendKeyTag(df.etags, v, k, tag_delim+val)
 					}
 				}
 			}
 		}
 		// add special stuff
-		switch mes.Type{
+		switch mes.Type {
 		case 1300:
 			if sys := cutout(cont, " syscall="); sys == "" {
 				return ""
@@ -135,7 +135,7 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 					if i == "event" {
 						df.event = true
 					} else if v, ok := confs.tokens[mes.Type]["key"]; ok {
-						df.tags = appendKeyTag(df.tags, v, "key", tag_delim + i)
+						df.tags = appendKeyTag(df.tags, v, "key", tag_delim+i)
 						if len(strings.Split(i, ":")) > 1 {
 							df.tags = append(df.tags, strings.Replace(i, ":", tag_delim, -1))
 						}
@@ -145,7 +145,7 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 		case 1302:
 			if n, ok := df.tokens["name"]; ok {
 				if nt := cutout(cont, " nametype="); nt == "NORMAL" {
-					df.etags = appendKeyTag(df.etags, confs.tokens[mes.Type]["name"], "name", tag_delim + n)
+					df.etags = appendKeyTag(df.etags, confs.tokens[mes.Type]["name"], "name", tag_delim+n)
 				}
 			}
 		case 1309:
@@ -159,17 +159,17 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 
 	// arg stuff
 	if df.arg_string != "" && df.comm != "" {
-		arg_val = cutout(df.arg_string, df.comm + " ")
+		arg_val = cutout(df.arg_string, df.comm+" ")
 		arg_val = strings.TrimSpace(arg_val[strings.Index(arg_val, "=")+1:])
 		if arg_val != "" {
-			df.tags = appendKeyTag(df.tags, confs.tokens[uint16(1309)]["args"], "arg", tag_delim + arg_val)
+			df.tags = appendKeyTag(df.tags, confs.tokens[uint16(1309)]["args"], "arg", tag_delim+arg_val)
 		}
 	}
-	
+
 	// users
 	for _, ut := range []string{"uid", "auid"} {
 		if u, ok := confs.tokens[uint16(1300)][ut]; ok {
-			df.tags = appendKeyTag(df.tags, u, ut, tag_delim + df.uid_map[df.tokens[ut]])
+			df.tags = appendKeyTag(df.tags, u, ut, tag_delim+df.uid_map[df.tokens[ut]])
 		}
 	}
 
@@ -189,7 +189,7 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 					evnt_t += " and matched on Key Group " + strings.Replace(strings.Replace(df.tokens["key"], ",event", "", -1), "event,", "", -1)
 				}
 				dat_gram = "_e{" + strconv.Itoa(len(evnt_t)) + "," + strconv.Itoa(len(df.content)) + "}:" + evnt_t + "|" + df.content + "|s:goaudit"
-				df.tags = append(df.tags, df.etags...)  
+				df.tags = append(df.tags, df.etags...)
 				if len(df.tags) > 0 {
 					sort.Strings(df.tags)
 					dat_gram += string("|#" + strings.Join(df.tags, ","))
@@ -197,12 +197,12 @@ func formatDatagram(msg *AuditMessageGroup, confs *StatsdConfig) (string) {
 			}
 		} else if confs.kind == "statsd" {
 			dat_gram = "goaudit.syscall." + df.syscall + ".count"
-			df.tags = append(df.tags, df.etags...) 
-        	        if len(df.tags) > 0 {
-        	        	sort.Strings(df.tags)
-        	        	dat_gram += string("." + strings.Join(df.tags, "."))
-        	        }       
-        	        dat_gram += ":1|c"
+			df.tags = append(df.tags, df.etags...)
+			if len(df.tags) > 0 {
+				sort.Strings(df.tags)
+				dat_gram += string("." + strings.Join(df.tags, "."))
+			}
+			dat_gram += ":1|c"
 		}
 	}
 	// el.Println("event cont:", df.content)
@@ -224,14 +224,14 @@ func newStatsdClient(addr string) (*statsdClient, error) {
 }
 
 // marshaller method for sending data over statsd or dogstatsd
-func (a *AuditMarshaller) sendDatagram(msg *AuditMessageGroup) (error) {
+func (a *AuditMarshaller) sendDatagram(msg *AuditMessageGroup) error {
 	// This will format the messages into a datagram for either statsd or dogstatsd depending on configuration
 	data_gram := formatDatagram(msg, &a.statsdConfigs)
 	if data_gram == "" {
 		return nil
 	}
 	udp_cl, err := newStatsdClient(a.statsdConfigs.ip + ":" + a.statsdConfigs.port)
-	el.Println("sending datagram to address " + a.statsdConfigs.ip + ":" + a.statsdConfigs.port + " with content:", data_gram)
+	el.Println("sending datagram to address "+a.statsdConfigs.ip+":"+a.statsdConfigs.port+" with content:", data_gram)
 	if err != nil {
 		return err
 	}
@@ -328,7 +328,7 @@ func (a *AuditMarshaller) completeMessage(seq int) {
 		delete(a.msgs, seq)
 		return
 	}
-	
+
 	if a.statsdConfigs.kind == "statsd" || a.statsdConfigs.kind == "dogstatsd" {
 		if err := a.sendDatagram(msg); err != nil {
 			el.Println("Failed to send statsd datagram. Error:", err)

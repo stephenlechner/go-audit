@@ -307,15 +307,15 @@ func createFilters(config *viper.Viper) []AuditFilter {
 }
 
 func createStatsdConfig(config *viper.Viper) (StatsdConfig, error) {
-	sc := StatsdConfig {
+	sc := StatsdConfig{
 		kind: config.GetString("statsd.type"),
-		ip: config.GetString("statsd.ip"),
+		ip:   config.GetString("statsd.ip"),
 		port: config.GetString("statsd.port"),
 	}
 	sc.tokens = make(map[uint16]map[string]string)
-    if sc.kind == "statsd" || sc.kind == "dogstatsd" {
-    	l.Println("config type: ", sc.kind)
-    	t := config.Get("statsd.tokens")
+	if sc.kind == "statsd" || sc.kind == "dogstatsd" {
+		l.Println("config type: ", sc.kind)
+		t := config.Get("statsd.tokens")
 		tl, ok := t.([]interface{})
 		if !ok {
 			return sc, errors.New(fmt.Sprintf("statsd.tokens not parsable as a list, has type: %T", t))
@@ -383,7 +383,7 @@ func main() {
 	if err != nil {
 		el.Fatal(err)
 	}
-	
+
 	marshaller := NewAuditMarshaller(
 		writer,
 		config.GetBool("message_tracking.enabled"),
