@@ -318,21 +318,21 @@ func createStatsdConfig(config *viper.Viper) (StatsdConfig, error) {
 		t := config.Get("statsd.tokens")
 		tl, ok := t.([]interface{})
 		if !ok {
-			return sc, errors.New(fmt.Sprintf("statsd.tokens not parsable as a list, has type: %T", t))
+			return sc, fmt.Errorf("statsd.tokens not parsable as a list, has type: %T", t)
 		}
 		for _, ti := range tl {
 			tm, ok := ti.(map[interface{}]interface{})
 			if !ok {
-				return sc, errors.New(fmt.Sprintf("statsd.tokens item not mapable: %s", ti))
+				return sc, fmt.Errorf("statsd.tokens item not mapable: %s", ti)
 			}
 			for k, v := range tm {
 				it, ok := k.(int)
 				if !ok {
-					return sc, errors.New(fmt.Sprintf("statsd.tokens item not an int: %s", k))
+					return sc, fmt.Errorf("statsd.tokens item not an int: %s", k)
 				}
 				ts, ok := v.(string)
 				if !ok {
-					return sc, errors.New(fmt.Sprintf("statsd.tokens item value not a string: %s", v))
+					return sc, fmt.Errorf("statsd.tokens item value not a string: %s", v)
 				}
 				sc.tokens[uint16(it)] = make(map[string]string)
 				for _, j := range strings.Split(ts, ",") {
