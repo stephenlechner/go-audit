@@ -24,6 +24,7 @@ type AuditMarshaller struct {
 	maxOutOfOrder int
 	attempts      int
 	filters       map[string]map[uint16][]*regexp.Regexp // { syscall: { mtype: [regexp, ...] } }
+	statsdConfigs StatsdConfig
 }
 
 type AuditFilter struct {
@@ -33,7 +34,7 @@ type AuditFilter struct {
 }
 
 // Create a new marshaller
-func NewAuditMarshaller(w *AuditWriter, eventMin uint16, eventMax uint16, trackMessages, logOOO bool, maxOOO int, filters []AuditFilter) *AuditMarshaller {
+func NewAuditMarshaller(w *AuditWriter, eventMin uint16, eventMax uint16, trackMessages, logOOO bool, maxOOO int, filters []AuditFilter, statsdConfigs StatsdConfig) *AuditMarshaller {
 	am := AuditMarshaller{
 		writer:        w,
 		msgs:          make(map[int]*AuditMessageGroup, 5), // It is not typical to have more than 2 message groups at any given time
@@ -44,6 +45,7 @@ func NewAuditMarshaller(w *AuditWriter, eventMin uint16, eventMax uint16, trackM
 		logOutOfOrder: logOOO,
 		maxOutOfOrder: maxOOO,
 		filters:       make(map[string]map[uint16][]*regexp.Regexp),
+		statsdConfigs: statsdConfigs,
 	}
 
 	for _, filter := range filters {
@@ -122,6 +124,12 @@ func (a *AuditMarshaller) completeMessage(seq int) {
 		return
 	}
 
+	if a.statsdConfigs.kind == "statsd" || a.statsdConfigs.kind == "dogstatsd" {
+		if err := a.sendDatagram(msg); err != nil {
+			el.Println("Failed to send statsd datagram. Error:", err)
+		}
+	}
+
 	if err := a.writer.Write(msg); err != nil {
 		el.Println("Failed to write message. Error:", err)
 		os.Exit(1)
@@ -179,4 +187,21 @@ func (a *AuditMarshaller) detectMissing(seq int) {
 		// Keep track of the largest sequence
 		a.lastSeq = seq
 	}
+}
+
+// marshaller method for sending data over statsd or dogstatsd
+func (a *AuditMarshaller) sendDatagram(msg *AuditMessageGroup) error {
+	// This will format the messages into a datagram for either statsd or dogstatsd depending on configuration
+	data_gram := formatDatagram(msg, &a.statsdConfigs)
+	if data_gram == "" {
+		return nil
+	}
+	udp_cl, err := newStatsdClient(a.statsdConfigs.ip + ":" + a.statsdConfigs.port)
+	el.Println("sending datagram to address "+a.statsdConfigs.ip+":"+a.statsdConfigs.port+" with content:", data_gram)
+	if err != nil {
+		return err
+	}
+	defer udp_cl.conn.Close()
+	udp_cl.conn.Write([]byte(data_gram))
+	return nil
 }

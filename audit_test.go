@@ -35,6 +35,7 @@ func Test_loadConfig(t *testing.T) {
 	assert.Equal(t, 0, config.GetInt("log.flags"), "log.flags should default to 0")
 	assert.Equal(t, 0, l.Flags(), "stdout log flags was wrong")
 	assert.Equal(t, 0, el.Flags(), "stderr log flags was wrong")
+	assert.Equal(t, "none", config.GetString("statsd.type"), "stastd.type should default to none")
 	assert.Nil(t, err)
 
 	// parse error
@@ -329,7 +330,7 @@ func Test_createOutput(t *testing.T) {
 }
 
 func Benchmark_MultiPacketMessage(b *testing.B) {
-	marshaller := NewAuditMarshaller(NewAuditWriter(&noopWriter{}, 1), uint16(1300), uint16(1399), false, false, 1, []AuditFilter{})
+	marshaller := NewAuditMarshaller(NewAuditWriter(&noopWriter{}, 1), uint16(1300), uint16(1399), false, false, 1, []AuditFilter{}, StatsdConfig{kind: "none"})
 
 	data := make([][]byte, 6)
 
