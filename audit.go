@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/spf13/viper"
 	"log"
 	"log/syslog"
 	"os"
@@ -15,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/spf13/viper"
 )
 
 var l = log.New(os.Stdout, "", 0)
@@ -30,6 +31,8 @@ func loadConfig(configFile string) (*viper.Viper, error) {
 	config := viper.New()
 	config.SetConfigFile(configFile)
 
+	config.SetDefault("events.min", 1300)
+	config.SetDefault("events.max", 1399)
 	config.SetDefault("message_tracking.enabled", true)
 	config.SetDefault("message_tracking.log_out_of_order", false)
 	config.SetDefault("message_tracking.max_out_of_order", 500)
@@ -53,7 +56,7 @@ func loadConfig(configFile string) (*viper.Viper, error) {
 func setRules(config *viper.Viper, e executor) error {
 	// Clear existing rules
 	if err := e("auditctl", "-D"); err != nil {
-		return errors.New(fmt.Sprintf("Failed to flush existing audit rules. Error: %s", err))
+		return fmt.Errorf("Failed to flush existing audit rules. Error: %s", err)
 	}
 
 	l.Println("Flushed existing audit rules")
@@ -67,13 +70,13 @@ func setRules(config *viper.Viper, e executor) error {
 			}
 
 			if err := e("auditctl", strings.Fields(v)...); err != nil {
-				return errors.New(fmt.Sprintf("Failed to add rule #%d. Error: %s", i+1, err))
+				return fmt.Errorf("Failed to add rule #%d. Error: %s", i+1, err)
 			}
 
 			l.Printf("Added audit rule #%d\n", i+1)
 		}
 	} else {
-		return errors.New("No audit rules found.")
+		return errors.New("No audit rules found")
 	}
 
 	return nil
@@ -124,9 +127,7 @@ func createOutput(config *viper.Viper) (*AuditWriter, error) {
 func createSyslogOutput(config *viper.Viper) (*AuditWriter, error) {
 	attempts := config.GetInt("output.syslog.attempts")
 	if attempts < 1 {
-		return nil, errors.New(
-			fmt.Sprintf("Output attempts for syslog must be at least 1, %v provided", attempts),
-		)
+		return nil, fmt.Errorf("Output attempts for syslog must be at least 1, %v provided", attempts)
 	}
 
 	syslogWriter, err := syslog.Dial(
@@ -137,7 +138,7 @@ func createSyslogOutput(config *viper.Viper) (*AuditWriter, error) {
 	)
 
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to open syslog writer. Error: %v", err))
+		return nil, fmt.Errorf("Failed to open syslog writer. Error: %v", err)
 	}
 
 	return NewAuditWriter(syslogWriter, attempts), nil
@@ -146,9 +147,7 @@ func createSyslogOutput(config *viper.Viper) (*AuditWriter, error) {
 func createFileOutput(config *viper.Viper) (*AuditWriter, error) {
 	attempts := config.GetInt("output.file.attempts")
 	if attempts < 1 {
-		return nil, errors.New(
-			fmt.Sprintf("Output attempts for file must be at least 1, %v provided", attempts),
-		)
+		return nil, fmt.Errorf("Output attempts for file must be at least 1, %v provided", attempts)
 	}
 
 	mode := os.FileMode(config.GetInt("output.file.mode"))
@@ -162,37 +161,37 @@ func createFileOutput(config *viper.Viper) (*AuditWriter, error) {
 	)
 
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to open output file. Error: %s", err))
+		return nil, fmt.Errorf("Failed to open output file. Error: %s", err)
 	}
 
 	if err := f.Chmod(mode); err != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to set file permissions. Error: %s", err))
+		return nil, fmt.Errorf("Failed to set file permissions. Error: %s", err)
 	}
 
 	uname := config.GetString("output.file.user")
 	u, err := user.Lookup(uname)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Could not find uid for user %s. Error: %s", uname, err))
+		return nil, fmt.Errorf("Could not find uid for user %s. Error: %s", uname, err)
 	}
 
 	gname := config.GetString("output.file.group")
 	g, err := user.LookupGroup(gname)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Could not find gid for group %s. Error: %s", gname, err))
+		return nil, fmt.Errorf("Could not find gid for group %s. Error: %s", gname, err)
 	}
 
 	uid, err := strconv.ParseInt(u.Uid, 10, 32)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Found uid could not be parsed. Error: %s", err))
+		return nil, fmt.Errorf("Found uid could not be parsed. Error: %s", err)
 	}
 
 	gid, err := strconv.ParseInt(g.Gid, 10, 32)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Found gid could not be parsed. Error: %s", err))
+		return nil, fmt.Errorf("Found gid could not be parsed. Error: %s", err)
 	}
 
 	if err = f.Chown(int(uid), int(gid)); err != nil {
-		return nil, errors.New(fmt.Sprintf("Could not chown output file. Error: %s", err))
+		return nil, fmt.Errorf("Could not chown output file. Error: %s", err)
 	}
 
 	return NewAuditWriter(f, attempts), nil
@@ -204,7 +203,7 @@ func handleLogRotation(config *viper.Viper, writer *AuditWriter) {
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGUSR1)
 
-	for _ = range sigc {
+	for range sigc {
 		newWriter, err := createFileOutput(config)
 		if err != nil {
 			el.Fatalln("Error re-opening log file. Exiting.")
@@ -224,9 +223,7 @@ func handleLogRotation(config *viper.Viper, writer *AuditWriter) {
 func createStdOutOutput(config *viper.Viper) (*AuditWriter, error) {
 	attempts := config.GetInt("output.stdout.attempts")
 	if attempts < 1 {
-		return nil, errors.New(
-			fmt.Sprintf("Output attempts for stdout must be at least 1, %v provided", attempts),
-		)
+		return nil, fmt.Errorf("Output attempts for stdout must be at least 1, %v provided", attempts)
 	}
 
 	// l logger is no longer stdout
@@ -386,6 +383,8 @@ func main() {
 
 	marshaller := NewAuditMarshaller(
 		writer,
+		uint16(config.GetInt("events.min")),
+		uint16(config.GetInt("events.max")),
 		config.GetBool("message_tracking.enabled"),
 		config.GetBool("message_tracking.log_out_of_order"),
 		config.GetInt("message_tracking.max_out_of_order"),
@@ -393,7 +392,7 @@ func main() {
 		sc,
 	)
 
-	l.Println("Started processing events")
+	l.Printf("Started processing events in the range [%d, %d]\n", config.GetInt("events.min"), config.GetInt("events.max"))
 
 	//Main loop. Get data from netlink and send it to the json lib for processing
 	for {
