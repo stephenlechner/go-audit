@@ -2,8 +2,6 @@ package main
 
 import (
 	"errors"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"log/syslog"
 	"net"
@@ -14,6 +12,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_loadConfig(t *testing.T) {
@@ -22,6 +23,8 @@ func Test_loadConfig(t *testing.T) {
 
 	// defaults
 	config, err := loadConfig(file)
+	assert.Equal(t, 1300, config.GetInt("events.min"), "events.min should default to 1300")
+	assert.Equal(t, 1399, config.GetInt("events.max"), "events.max should default to 1399")
 	assert.Equal(t, true, config.GetBool("message_tracking.enabled"), "message_tracking.enabled should default to true")
 	assert.Equal(t, false, config.GetBool("message_tracking.log_out_of_order"), "message_tracking.log_out_of_order should default to false")
 	assert.Equal(t, 500, config.GetInt("message_tracking.max_out_of_order"), "message_tracking.max_out_of_order should default to 500")
@@ -59,7 +62,7 @@ func Test_setRules(t *testing.T) {
 
 	// fail on 0 rules
 	err = setRules(config, func(s string, a ...string) error { return nil })
-	assert.EqualError(t, err, "No audit rules found.")
+	assert.EqualError(t, err, "No audit rules found")
 
 	// failure to set rule
 	r := 0
@@ -326,7 +329,7 @@ func Test_createOutput(t *testing.T) {
 }
 
 func Benchmark_MultiPacketMessage(b *testing.B) {
-	marshaller := NewAuditMarshaller(NewAuditWriter(&noopWriter{}, 1), false, false, 1, []AuditFilter{})
+	marshaller := NewAuditMarshaller(NewAuditWriter(&noopWriter{}, 1), uint16(1300), uint16(1399), false, false, 1, []AuditFilter{})
 
 	data := make([][]byte, 6)
 
